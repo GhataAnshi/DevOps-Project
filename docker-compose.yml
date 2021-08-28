@@ -1,0 +1,84 @@
+version: '3'
+
+services:
+    db1:
+       image: mysql
+       container_name: mysql
+       ports:
+         - "3306:3306"
+       volumes:
+         - mysql_volume:/var/lib/mysql
+       restart: always
+       environment:
+           MYSQL_USERNAME: root
+           MYSQL_PASSWORD: password
+           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+       networks:
+         - app-network
+
+
+    mongodb:
+       depends_on:
+         - db1
+       image: mongo
+       container_name: mongodb
+       ports:
+         - "27017:27017"
+       volumes:
+         - mongodb_volume:/data/db
+       restart: always
+       networks:
+         - app-network
+
+
+    nodejs:
+       build:
+         context: .
+         dockerfile: Dockerfile
+       links:
+         - db1
+         - mongodb
+       image: backend:1.0.0
+       container_name: nodejs_application
+       restart: always
+       networks:
+         - app-network
+
+    webserver:
+       image: nginx:mainline-alpine
+       container_name: webserver
+       restart: unless-stopped
+       ports:
+          - "80:80"
+       volumes:
+          - web-root:/var/www/html
+          - ./nginx-conf:/etc/nginx/conf.d
+          - certbot-etc:/etc/letsencrypt
+          - certbot-var:/var/lib/letsencrypt
+       depends_on:
+          - nodejs
+       networks:
+          - app-network
+
+    certbot:
+       image: certbot/certbot
+       container_name: certbot
+       volumes:
+          - certbot-etc:/etc/letsencrypt
+          - certbot-var:/var/lib/letsencrypt
+          - web-root:/var/www/html
+       depends_on:
+          - webserver
+       command: certonly --webroot --webroot-path=/var/www/html --email ghata@dummy.com --agree-tos --no-eff-email --staging -d example.com  -d www.example.com
+
+volumes:
+  mysql_volume:
+  mongodb_volume:
+  certbot-etc:
+  certbot-var:
+  web-root:
+
+networks:
+  app-network:
+    driver: bridge
+  
